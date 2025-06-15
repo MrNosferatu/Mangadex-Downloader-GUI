@@ -16,15 +16,19 @@ class MangadexAPI(QObject):
         self.base_url = "https://api.mangadex.org"
         self.session = self._create_session()
         
-    def search_manga(self, title, limit=20, offset=0):
+    def search_manga(self, title, limit=20, offset=0, content_ratings=None):
         """Search for manga by title"""
         url = f"{self.base_url}/manga"
         params = {
             "title": title,
             "limit": limit,
             "offset": offset,
-            "includes[]": ["cover_art", "author", "artist", "tag"]
+            "includes[]": ["cover_art", "author", "artist", "tag"],
         }
+        
+        # Add content ratings if provided
+        if content_ratings:
+            params["contentRating[]"] = content_ratings
         
         response = self._request_with_retry("GET", url, params=params)
         if response.status_code == 200:
@@ -38,7 +42,7 @@ class MangadexAPI(QObject):
         params = {
             "translatedLanguage[]": [language],
             "limit": 100,
-            "order[chapter]": "asc"
+            "order[chapter]": "asc",
         }
         
         response = self._request_with_retry("GET", url, params=params)

@@ -7,7 +7,8 @@ class Settings:
         self.default_settings = {
             "download_dir": os.path.expanduser("~/Downloads"),
             "download_as_pdf": False,
-            "preferred_language": "en"
+            "preferred_language": "en",
+            "content_ratings": ["safe", "suggestive"]
         }
         self.settings = self.load_settings()
     

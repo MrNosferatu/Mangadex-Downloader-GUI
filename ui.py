@@ -28,7 +28,7 @@ class MangaCard(QWidget):
         self.cover_label = QLabel()
         self.cover_label.setFixedSize(150, 200)
         self.cover_label.setAlignment(Qt.AlignCenter)
-        self.cover_label.setStyleSheet("background-color: #f0f0f0;")
+        self.cover_label.setStyleSheet("background-color: #1a1a1a; color: white;")
         
         # Info layout - create a fixed height container
         info_container = QWidget()
@@ -125,45 +125,31 @@ class MangaCard(QWidget):
         
         self.setLayout(self.layout)
         
-        # Style
+        # Style for manga card
         self.setStyleSheet("""
             QWidget {
-                background-color: white;
+                background-color: #2c2c2c;
                 border-radius: 5px;
+                color: white;
+            }
+            QLabel {
+                color: white;
             }
             QPushButton {
-                background-color: #4CAF50;
+                background-color: #c45236;
                 color: white;
                 border: none;
                 padding: 5px;
                 border-radius: 3px;
             }
             QPushButton:hover {
-                background-color: #45a049;
+                background-color: #d46246;
             }
         """)
     
     def set_cover_image(self, pixmap):
         """Set the cover image when loaded from the background thread"""
         self.cover_label.setPixmap(pixmap)
-        
-        # Style
-        self.setStyleSheet("""
-            QWidget {
-                background-color: white;
-                border-radius: 5px;
-            }
-            QPushButton {
-                background-color: #4CAF50;
-                color: white;
-                border: none;
-                padding: 5px;
-                border-radius: 3px;
-            }
-            QPushButton:hover {
-                background-color: #45a049;
-            }
-        """)
         
     def on_download_clicked(self):
         self.download_clicked.emit(self.manga_data)
@@ -180,6 +166,51 @@ class ChapterSelectionDialog(QDialog):
         self.selected_chapters = []
         self.downloaded_chapters = downloaded_chapters or []
         self.incomplete_chapters = incomplete_chapters or []
+        
+        # Set dialog style
+        self.setStyleSheet("""
+            QDialog {
+                background-color: #191a1c;
+                color: white;
+            }
+            QLabel {
+                color: white;
+            }
+            QComboBox {
+                background-color: #4f4f4f;
+                color: white;
+                border: 1px solid #4f4f4f;
+                border-radius: 3px;
+                padding: 3px;
+            }
+            QComboBox QAbstractItemView {
+                background-color: #4f4f4f;
+                color: white;
+                selection-background-color: #c45236;
+            }
+            QScrollArea, QWidget#scrollContent {
+                background-color: #191a1c;
+                color: white;
+            }
+            QCheckBox {
+                color: white;
+            }
+            QCheckBox::indicator:checked {
+                background-color: #c45236;
+                border: 1px solid white;
+            }
+            QPushButton {
+                background-color: #c45236;
+                color: white;
+                border: none;
+                padding: 5px;
+                border-radius: 3px;
+            }
+            QPushButton:hover {
+                background-color: #d46246;
+            }
+        """)
+        
         self.init_ui()
         self.load_chapters(preferred_language)
         
@@ -415,8 +446,8 @@ class ChapterSelectionDialog(QDialog):
 
 
 class DownloadThread(QThread):
-    progress_updated = pyqtSignal(int, int)  # current, total
-    chapter_updated = pyqtSignal(int, int)   # current chapter, total chapters
+    progress_updated = pyqtSignal(int, int, str, str)  # current, total, manga_title, chapter_title
+    chapter_updated = pyqtSignal(int, int, str)   # current chapter, total chapters, manga_title
     download_finished = pyqtSignal(list)     # list of downloaded paths
     
     def __init__(self, api, chapter_data_list, manga_title, download_dir, as_pdf):
@@ -454,6 +485,27 @@ class ImageDownloadDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Downloading...")
         self.setFixedSize(300, 150)
+        
+        # Set dialog style
+        self.setStyleSheet("""
+            QDialog {
+                background-color: #191a1c;
+                color: white;
+            }
+            QLabel {
+                color: white;
+            }
+            QProgressBar {
+                border: 1px solid #4f4f4f;
+                border-radius: 3px;
+                background-color: #2c2c2c;
+                color: white;
+                text-align: center;
+            }
+            QProgressBar::chunk {
+                background-color: #c45236;
+            }
+        """)
         
         layout = QVBoxLayout()
         
@@ -495,6 +547,75 @@ class MangadexGUI(QWidget):
         self.search_results = []
         self.current_manga = None
         self.download_thread = None
+        
+        # Set application style
+        self.setStyleSheet("""
+            QWidget {
+                background-color: #191a1c;
+                color: white;
+            }
+            QLabel {
+                color: white;
+            }
+            QLineEdit, QComboBox, QScrollArea {
+                background-color: #2c2c2c;
+                color: white;
+                border: 1px solid #4f4f4f;
+                border-radius: 3px;
+                padding: 3px;
+            }
+            QComboBox {
+                background-color: #4f4f4f;
+            }
+            QComboBox QAbstractItemView {
+                background-color: #4f4f4f;
+                color: white;
+                selection-background-color: #c45236;
+            }
+            QPushButton {
+                background-color: #c45236;
+                color: white;
+                border: none;
+                padding: 5px;
+                border-radius: 3px;
+            }
+            QPushButton:hover {
+                background-color: #d46246;
+            }
+            QRadioButton {
+                color: white;
+            }
+            QRadioButton::indicator {
+                width: 13px;
+                height: 13px;
+                border-radius: 7px;
+            }
+            QRadioButton::indicator:unchecked {
+                border: 2px solid #4f4f4f;
+            }
+            QRadioButton::indicator:checked {
+                border: 2px solid #c45236;
+                background-color: #c45236;
+                border-radius: 7px;
+            }
+            QScrollBar {
+                background-color: #2c2c2c;
+            }
+            QScrollBar::handle {
+                background-color: #4f4f4f;
+            }
+            QProgressBar {
+                border: 1px solid #4f4f4f;
+                border-radius: 3px;
+                background-color: #2c2c2c;
+                color: white;
+                text-align: center;
+            }
+            QProgressBar::chunk {
+                background-color: #c45236;
+            }
+        """)
+        
         self.init_ui()
         
     def init_ui(self):
@@ -573,12 +694,22 @@ class MangadexGUI(QWidget):
         # Download progress bar
         progress_layout = QVBoxLayout()
         
-        # Single progress label with all information
-        self.progress_label = QLabel("Ready")
-        self.progress_label.setAlignment(Qt.AlignCenter)
-        self.progress_label.setVisible(False)
+        # Progress info layout with three evenly spaced labels
+        progress_info_layout = QHBoxLayout()
         
-        progress_layout.addWidget(self.progress_label)
+        self.chapter_progress_label = QLabel("Chapters 0/0")
+        self.manga_title_label = QLabel("Ready")
+        self.image_progress_label = QLabel("Images 0/0")
+        
+        self.chapter_progress_label.setAlignment(Qt.AlignLeft)
+        self.manga_title_label.setAlignment(Qt.AlignCenter)
+        self.image_progress_label.setAlignment(Qt.AlignRight)
+        
+        progress_info_layout.addWidget(self.chapter_progress_label, 1)
+        progress_info_layout.addWidget(self.manga_title_label, 1)
+        progress_info_layout.addWidget(self.image_progress_label, 1)
+        
+        progress_layout.addLayout(progress_info_layout)
         
         self.chapter_progress_bar = QProgressBar()
         self.chapter_progress_bar.setVisible(False)
@@ -617,7 +748,9 @@ class MangadexGUI(QWidget):
         
         # Run search in a separate thread
         def search_thread(query, emitter):
-            results = self.api.search_manga(query)
+            # Get content ratings from settings
+            content_ratings = self.settings.get("content_ratings", ["safe", "suggestive"])
+            results = self.api.search_manga(query, content_ratings=content_ratings)
             emitter.search_complete.emit(results)
         
         # Start the search thread
@@ -639,17 +772,31 @@ class MangadexGUI(QWidget):
             self.results_layout.addWidget(no_results)
             return
         
-        # Display results
+        # Create a grid layout for responsive cards
+        self.grid_container = QWidget()
+        self.grid_layout = QHBoxLayout(self.grid_container)
+        self.grid_layout.setSpacing(10)
+        
+        # Create a list to store all cards
+        self.manga_cards = []
+        
+        # Create all cards first
         for manga in self.search_results:
             card = MangaCard(manga)
             card.download_clicked.connect(self.show_chapter_selection)
-            self.results_layout.addWidget(card)
-            
-            # Add spacing between cards
-            self.results_layout.addSpacing(10)
-            
+            self.manga_cards.append(card)
+        
+        # Arrange cards in the grid
+        self.arrange_cards()
+        
+        # Add the grid container to the results layout
+        self.results_layout.addWidget(self.grid_container)
+        
         # Add stretch at the end to push all results to the top
         self.results_layout.addStretch(1)
+        
+        # Connect resize event to rearrange cards
+        self.results_area.resizeEvent = self.on_resize
     
     def select_directory(self):
         dir_path = QFileDialog.getExistingDirectory(self, "Select Download Directory", self.download_dir)
@@ -702,8 +849,12 @@ class MangadexGUI(QWidget):
         # Setup progress bar
         self.chapter_progress_bar.setMaximum(len(chapter_data_list))
         self.chapter_progress_bar.setValue(0)
-        self.progress_label.setText(f"Chapter 0/{len(chapter_data_list)}             {manga_title}             Images 0/0")
-        self.progress_label.setVisible(True)
+        
+        # Update the individual progress labels
+        self.chapter_progress_label.setText(f"Chapters 0/{len(chapter_data_list)}")
+        self.manga_title_label.setText(manga_title)
+        self.image_progress_label.setText("Images 0/0")
+        
         self.chapter_progress_bar.setVisible(True)
         
         # Create and start download thread
@@ -728,13 +879,19 @@ class MangadexGUI(QWidget):
         chapter_current = self.chapter_progress_bar.value()
         chapter_total = self.chapter_progress_bar.maximum()
         
-        # Update the progress label with all information
-        self.progress_label.setText(f"Chapter {chapter_current}/{chapter_total}             {manga_title}             Images {current}/{total}")
+        # Update the individual progress labels
+        self.chapter_progress_label.setText(f"Chapters {chapter_current}/{chapter_total}")
+        self.manga_title_label.setText(manga_title)
+        self.image_progress_label.setText(f"Images {current}/{total}")
     
     def update_chapter_progress(self, current, total, manga_title):
         self.chapter_progress_bar.setMaximum(total)
         self.chapter_progress_bar.setValue(current)
-        self.progress_label.setText(f"Chapter {current}/{total}             {manga_title}             Images 0/0")
+        
+        # Update the individual progress labels
+        self.chapter_progress_label.setText(f"Chapters {current}/{total}")
+        self.manga_title_label.setText(manga_title)
+        self.image_progress_label.setText("Images 0/0")
     
     def download_complete(self, downloaded_paths):
         # Show completion message
@@ -745,4 +902,54 @@ class MangadexGUI(QWidget):
                                f"All {len(downloaded_paths)} chapters downloaded to:\n{manga_dir}")
         
         # Update progress bar text
-        self.progress_label.setText("Download complete!")
+        self.manga_title_label.setText("Download complete!")
+        
+    def on_resize(self, event):
+        """Handle resize events to rearrange manga cards responsively"""
+        if hasattr(self, 'manga_cards'):
+            self.arrange_cards()
+        # Call the original resize event handler
+        super(MangadexGUI, self).resizeEvent(event)
+        
+    def arrange_cards(self):
+        """Arrange manga cards in a responsive grid based on window width"""
+        if not hasattr(self, 'manga_cards') or not self.manga_cards:
+            return
+            
+        # Clear the current layout
+        while self.grid_layout.count():
+            item = self.grid_layout.takeAt(0)
+            if item.widget():
+                item.widget().setParent(None)
+                
+        # Calculate number of columns based on width
+        width = self.results_area.width()
+        
+        # Determine columns based on width breakpoints
+        if width < 600:
+            columns = 1
+        elif width < 900:
+            columns = 2
+        elif width < 1200:
+            columns = 3
+        else:
+            columns = 4
+            
+        # Create column layouts
+        column_layouts = []
+        for i in range(columns):
+            column_widget = QWidget()
+            column_layout = QVBoxLayout(column_widget)
+            column_layout.setContentsMargins(5, 5, 5, 5)
+            column_layout.setSpacing(10)
+            column_layouts.append((column_widget, column_layout))
+            self.grid_layout.addWidget(column_widget)
+            
+        # Distribute cards among columns
+        for i, card in enumerate(self.manga_cards):
+            column_index = i % columns
+            column_layouts[column_index][1].addWidget(card)
+            
+        # Add stretch to each column to push cards to the top
+        for _, layout in column_layouts:
+            layout.addStretch(1)

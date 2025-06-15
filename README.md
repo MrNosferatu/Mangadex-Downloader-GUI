@@ -52,3 +52,13 @@ run.bat
 - Cover images load asynchronously
 - Chapter lists maintain consistent spacing regardless of chapter count
 - Search results are displayed with consistent card sizes
+
+## UI Features
+
+- Dark mode interface with MangaDex-inspired color scheme:
+  - Background: #191a1c
+  - Cards: #2c2c2c
+  - Dropdowns: #4f4f4f
+  - Buttons: #c45236
+- High contrast white text for better readability
+- Consistent styling across all dialogs and components
