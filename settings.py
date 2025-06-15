@@ -6,7 +6,7 @@ class Settings:
         self.settings_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "settings.json")
         self.default_settings = {
             "download_dir": os.path.expanduser("~/Downloads"),
-            "download_as_pdf": True,
+            "download_as_pdf": False,
             "preferred_language": "en"
         }
         self.settings = self.load_settings()

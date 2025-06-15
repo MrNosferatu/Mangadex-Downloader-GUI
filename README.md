@@ -1,13 +1,16 @@
-# Mangadex GUI
+# Mangadex Downloader GUI
 
-A simple PyQt application for searching and downloading manga from MangaDex.
+A simple PyQt application for searching and downloading manga from MangaDex with a responsive user interface.
 
 ## Features
 
-- Search for manga by title
+- Search for manga by title with responsive UI
 - View manga information including cover, title, tags, and description
 - Download chapters as PDF or image files
 - Select multiple chapters to download
+- Background processing for improved performance
+- Consistent UI layout with proper spacing
+- Resume incomplete downloads
 
 ## Installation
 
@@ -23,6 +26,12 @@ Run the application:
 ```
 python main.py
 ```
+Or run using the bat file
+```
+run.bat
+```
+
+## Functionality
 
 1. Enter a manga title in the search box and click "Search"
 2. Browse the search results
@@ -36,3 +45,10 @@ python main.py
 - PyQt5
 - Requests
 - Pillow (for PDF conversion)
+
+## Performance Improvements
+
+- Manga searches run in background threads to keep UI responsive
+- Cover images load asynchronously
+- Chapter lists maintain consistent spacing regardless of chapter count
+- Search results are displayed with consistent card sizes

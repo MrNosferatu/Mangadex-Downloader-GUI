@@ -5,9 +5,12 @@ from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdi
 from PyQt5.QtCore import Qt, pyqtSignal, QSize, QThread, QObject
 from PyQt5.QtGui import QPixmap, QImage
 import requests
+from requests.adapters import HTTPAdapter
+from requests.packages.urllib3.util.retry import Retry
 from io import BytesIO
 import os
 import threading
+import time
 
 class MangaCard(QWidget):
     download_clicked = pyqtSignal(dict)
@@ -18,7 +21,7 @@ class MangaCard(QWidget):
         self.init_ui()
         
     def init_ui(self):
-        layout = QHBoxLayout()
+        self.layout = QHBoxLayout()
         
         # Cover image
         cover_layout = QVBoxLayout()
@@ -27,32 +30,11 @@ class MangaCard(QWidget):
         self.cover_label.setAlignment(Qt.AlignCenter)
         self.cover_label.setStyleSheet("background-color: #f0f0f0;")
         
-        # Find cover art
-        cover_file = None
-        for relationship in self.manga_data.get("relationships", []):
-            if relationship.get("type") == "cover_art":
-                cover_file = relationship.get("attributes", {}).get("fileName")
-                break
-        
-        if cover_file:
-            manga_id = self.manga_data.get("id")
-            cover_url = f"https://uploads.mangadex.org/covers/{manga_id}/{cover_file}"
-            
-            try:
-                response = requests.get(cover_url)
-                if response.status_code == 200:
-                    img = QImage()
-                    img.loadFromData(response.content)
-                    pixmap = QPixmap.fromImage(img)
-                    self.cover_label.setPixmap(pixmap.scaled(150, 200, Qt.KeepAspectRatio, Qt.SmoothTransformation))
-            except Exception as e:
-                print(f"Error loading cover: {e}")
-        
-        cover_layout.addWidget(self.cover_label)
-        layout.addLayout(cover_layout)
-        
-        # Info layout
-        info_layout = QVBoxLayout()
+        # Info layout - create a fixed height container
+        info_container = QWidget()
+        info_container.setFixedHeight(200)  # Match the cover image height
+        info_layout = QVBoxLayout(info_container)
+        info_layout.setContentsMargins(0, 0, 0, 0)
         
         # Title
         title = self.manga_data.get("attributes", {}).get("title", {}).get("en", "Unknown Title")
@@ -81,13 +63,89 @@ class MangaCard(QWidget):
         desc_label.setWordWrap(True)
         info_layout.addWidget(desc_label)
         
+        # Add stretch to push content to the top
+        info_layout.addStretch(1)
+        
         # Download button
         download_btn = QPushButton("Download")
         download_btn.clicked.connect(self.on_download_clicked)
         info_layout.addWidget(download_btn)
         
-        layout.addLayout(info_layout, 1)
-        self.setLayout(layout)
+        # Find cover art
+        cover_file = None
+        for relationship in self.manga_data.get("relationships", []):
+            if relationship.get("type") == "cover_art":
+                cover_file = relationship.get("attributes", {}).get("fileName")
+                break
+        
+        if cover_file:
+            manga_id = self.manga_data.get("id")
+            cover_url = f"https://uploads.mangadex.org/covers/{manga_id}/{cover_file}"
+            
+            # Create a loading placeholder
+            self.cover_label.setText("Loading...")
+            
+            # Create signal emitter for thread communication
+            class ImageSignalEmitter(QObject):
+                image_loaded = pyqtSignal(QPixmap)
+            
+            signal_emitter = ImageSignalEmitter()
+            signal_emitter.image_loaded.connect(self.set_cover_image)
+            
+            # Load image in a background thread
+            def load_image_thread(url, emitter):
+                try:
+                    # Create a session with retry capability
+                    session = requests.Session()
+                    retry_strategy = Retry(
+                        total=3,
+                        backoff_factor=1,
+                        status_forcelist=[429, 500, 502, 503, 504],
+                    )
+                    adapter = HTTPAdapter(max_retries=retry_strategy)
+                    session.mount("http://", adapter)
+                    session.mount("https://", adapter)
+                    
+                    response = session.get(url)
+                    if response.status_code == 200:
+                        img = QImage()
+                        img.loadFromData(response.content)
+                        pixmap = QPixmap.fromImage(img)
+                        scaled_pixmap = pixmap.scaled(150, 200, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                        emitter.image_loaded.emit(scaled_pixmap)
+                except Exception as e:
+                    print(f"Error loading cover: {e}")
+            
+            # Start the image loading thread
+            threading.Thread(target=load_image_thread, args=(cover_url, signal_emitter), daemon=True).start()
+        
+        cover_layout.addWidget(self.cover_label)
+        self.layout.addLayout(cover_layout)
+        self.layout.addWidget(info_container, 1)
+        
+        self.setLayout(self.layout)
+        
+        # Style
+        self.setStyleSheet("""
+            QWidget {
+                background-color: white;
+                border-radius: 5px;
+            }
+            QPushButton {
+                background-color: #4CAF50;
+                color: white;
+                border: none;
+                padding: 5px;
+                border-radius: 3px;
+            }
+            QPushButton:hover {
+                background-color: #45a049;
+            }
+        """)
+    
+    def set_cover_image(self, pixmap):
+        """Set the cover image when loaded from the background thread"""
+        self.cover_label.setPixmap(pixmap)
         
         # Style
         self.setStyleSheet("""
@@ -112,19 +170,23 @@ class MangaCard(QWidget):
 
 
 class ChapterSelectionDialog(QDialog):
-    def __init__(self, api, manga_id, preferred_language="en", parent=None):
+    def __init__(self, api, manga_id, preferred_language="en", parent=None, 
+                 downloaded_chapters=None, incomplete_chapters=None):
         super().__init__(parent)
         self.api = api
         self.manga_id = manga_id
         self.preferred_language = preferred_language
         self.chapters = {"data": []}
         self.selected_chapters = []
+        self.downloaded_chapters = downloaded_chapters or []
+        self.incomplete_chapters = incomplete_chapters or []
         self.init_ui()
         self.load_chapters(preferred_language)
         
     def init_ui(self):
         self.setWindowTitle("Select Chapters to Download")
         self.setMinimumWidth(400)
+        self.setMinimumHeight(400)
         
         layout = QVBoxLayout()
         
@@ -133,12 +195,82 @@ class ChapterSelectionDialog(QDialog):
         lang_layout.addWidget(QLabel("Language:"))
         
         self.language_combo = QComboBox()
-        self.language_combo.addItems(["English (en)", "Japanese (ja)", "Spanish (es)", "French (fr)", "German (de)"])
+        self.language_combo.setMaxVisibleItems(15)  # Limit the dropdown height
+        
+        # Language dictionary with codes and display names
+        self.languages = {
+            "en": "English",
+            "af": "Afrikaans",
+            "sq": "Albanian",
+            "ar": "Arabic",
+            "az": "Azerbaijani",
+            "eu": "Basque",
+            "be": "Belarusian",
+            "bn": "Bengali",
+            "bg": "Bulgarian",
+            "my": "Burmese",
+            "ca": "Catalan",
+            "zh": "Chinese (Simplified)",
+            "zh-hk": "Chinese (Traditional)",
+            "cv": "Chuvash",
+            "hr": "Croatian",
+            "cs": "Czech",
+            "da": "Danish",
+            "nl": "Dutch",
+            "eo": "Esperanto",
+            "et": "Estonian",
+            "fil": "Filipino",
+            "fi": "Finnish",
+            "fr": "French",
+            "ka": "Georgian",
+            "de": "German",
+            "el": "Greek",
+            "he": "Hebrew",
+            "hi": "Hindi",
+            "hu": "Hungarian",
+            "id": "Indonesian",
+            "ga": "Irish",
+            "it": "Italian",
+            "ja": "Japanese",
+            "jv": "Javanese",
+            "kk": "Kazakh",
+            "ko": "Korean",
+            "la": "Latin",
+            "lt": "Lithuanian",
+            "ms": "Malay",
+            "mn": "Mongolian",
+            "ne": "Nepali",
+            "no": "Norwegian",
+            "fa": "Persian",
+            "pl": "Polish",
+            "pt": "Portuguese",
+            "pt-br": "Portuguese (Br)",
+            "ro": "Romanian",
+            "ru": "Russian",
+            "sr": "Serbian",
+            "sk": "Slovak",
+            "sl": "Slovenian",
+            "es": "Spanish",
+            "es-la": "Spanish (LATAM)",
+            "sv": "Swedish",
+            "ta": "Tamil",
+            "te": "Telugu",
+            "th": "Thai",
+            "tr": "Turkish",
+            "uk": "Ukrainian",
+            "ur": "Urdu",
+            "uz": "Uzbek",
+            "vi": "Vietnamese"
+        }
+        
+        # Add languages to combo box
+        for code, name in self.languages.items():
+            self.language_combo.addItem(name, code)
         
         # Set default language
         index = 0
         for i in range(self.language_combo.count()):
-            if self.preferred_language in self.language_combo.itemText(i):
+            if self.preferred_language == self.language_combo.itemData(i):
                 index = i
                 break
         self.language_combo.setCurrentIndex(index)
@@ -155,7 +287,8 @@ class ChapterSelectionDialog(QDialog):
         self.scroll_layout = QVBoxLayout(self.scroll_content)
         self.scroll_area.setWidget(self.scroll_content)
         
-        layout.addWidget(self.scroll_area)
+        # Set the scroll area to take up more space
+        layout.addWidget(self.scroll_area, 1)
         
         # Buttons
         button_layout = QHBoxLayout()
@@ -175,7 +308,7 @@ class ChapterSelectionDialog(QDialog):
         layout.addLayout(button_layout)
         self.setLayout(layout)
     
-    def load_chapters(self, language):
+    def load_chapters(self, language_code):
         # Clear previous chapters
         while self.scroll_layout.count():
             item = self.scroll_layout.takeAt(0)
@@ -190,11 +323,6 @@ class ChapterSelectionDialog(QDialog):
         loading_label.setAlignment(Qt.AlignCenter)
         self.scroll_layout.addWidget(loading_label)
         
-        # Get language code from combo box text
-        lang_code = language
-        if "(" in language and ")" in language:
-            lang_code = language.split("(")[1].split(")")[0]
-        
         # Create signal emitter in the main thread
         from PyQt5.QtCore import QObject, pyqtSignal
         
@@ -206,7 +334,7 @@ class ChapterSelectionDialog(QDialog):
         
         # Load chapters in a separate thread to keep UI responsive
         def fetch_chapters(emitter):
-            chapters = self.api.get_manga_chapters(self.manga_id, lang_code)
+            chapters = self.api.get_manga_chapters(self.manga_id, language_code)
             # Use signal to update UI in main thread
             emitter.update_signal.emit(chapters)
         
@@ -229,6 +357,12 @@ class ChapterSelectionDialog(QDialog):
             self.scroll_layout.addWidget(no_chapters)
             return
         
+        # Create a container widget to hold all checkboxes
+        container = QWidget()
+        container_layout = QVBoxLayout(container)
+        container_layout.setSpacing(2)  # Minimal spacing between items
+        container_layout.setContentsMargins(0, 0, 0, 0)  # Remove margins
+        
         for chapter in self.chapters.get("data", []):
             chapter_attrs = chapter.get("attributes", {})
             chapter_num = chapter_attrs.get("chapter", "Unknown")
@@ -237,14 +371,31 @@ class ChapterSelectionDialog(QDialog):
             checkbox = QCheckBox(f"Chapter {chapter_num}: {chapter_title}")
             checkbox.setProperty("chapter_id", chapter.get("id"))
             checkbox.setProperty("chapter_data", chapter)
+            
+            # Mark as downloaded if it exists
+            if chapter_num in self.downloaded_chapters:
+                checkbox.setText(f"✓ Chapter {chapter_num}: {chapter_title} (Already Downloaded)")
+                checkbox.setStyleSheet("color: green;")
+            # Mark as incomplete if it exists but is incomplete
+            elif chapter_num in self.incomplete_chapters:
+                checkbox.setText(f"⚠ Chapter {chapter_num}: {chapter_title} (Incomplete)")
+                checkbox.setStyleSheet("color: orange;")
+                checkbox.setChecked(True)  # Auto-select incomplete chapters
+                
             self.chapter_checkboxes.append(checkbox)
-            self.scroll_layout.addWidget(checkbox)
+            container_layout.addWidget(checkbox)
+        
+        # Add stretch at the end to push all chapters to the top with empty space below
+        container_layout.addStretch(1)
+        
+        # Add the container to the scroll area
+        self.scroll_layout.addWidget(container)
     
 
     
     def on_language_changed(self, index):
-        language = self.language_combo.currentText()
-        self.load_chapters(language)
+        language_code = self.language_combo.itemData(index)
+        self.load_chapters(language_code)
     
     def select_all(self):
         for checkbox in self.chapter_checkboxes:
@@ -260,10 +411,7 @@ class ChapterSelectionDialog(QDialog):
         return selected
     
     def get_selected_language(self):
-        language = self.language_combo.currentText()
-        if "(" in language and ")" in language:
-            return language.split("(")[1].split(")")[0]
-        return language
+        return self.language_combo.itemData(self.language_combo.currentIndex())
 
 
 class DownloadThread(QThread):
@@ -293,16 +441,16 @@ class DownloadThread(QThread):
                 downloaded_paths.append(path)
             
             # Update chapter progress
-            self.chapter_updated.emit(i + 1, len(self.chapter_data_list))
+            self.chapter_updated.emit(i + 1, len(self.chapter_data_list), self.manga_title)
         
         self.download_finished.emit(downloaded_paths)
     
-    def on_download_progress(self, current, total):
-        self.progress_updated.emit(current, total)
+    def on_download_progress(self, current, total, manga_title, chapter_title):
+        self.progress_updated.emit(current, total, manga_title, chapter_title)
 
 
 class ImageDownloadDialog(QDialog):
-    def __init__(self, total_chapters=1, parent=None):
+    def __init__(self, parent=None, total_chapters=1):
         super().__init__(parent)
         self.setWindowTitle("Downloading...")
         self.setFixedSize(300, 150)
@@ -425,9 +573,12 @@ class MangadexGUI(QWidget):
         # Download progress bar
         progress_layout = QVBoxLayout()
         
-        self.chapter_progress_label = QLabel("Download Progress:")
-        self.chapter_progress_label.setVisible(False)
-        progress_layout.addWidget(self.chapter_progress_label)
+        # Single progress label with all information
+        self.progress_label = QLabel("Ready")
+        self.progress_label.setAlignment(Qt.AlignCenter)
+        self.progress_label.setVisible(False)
+        
+        progress_layout.addWidget(self.progress_label)
         
         self.chapter_progress_bar = QProgressBar()
         self.chapter_progress_bar.setVisible(False)
@@ -452,8 +603,34 @@ class MangadexGUI(QWidget):
             if widget:
                 widget.deleteLater()
         
-        # Search manga
-        results = self.api.search_manga(query)
+        # Show loading message
+        loading_label = QLabel("Searching...")
+        loading_label.setAlignment(Qt.AlignCenter)
+        self.results_layout.addWidget(loading_label)
+        
+        # Create signal emitter for thread communication
+        class SignalEmitter(QObject):
+            search_complete = pyqtSignal(object)
+        
+        signal_emitter = SignalEmitter()
+        signal_emitter.search_complete.connect(self.display_search_results)
+        
+        # Run search in a separate thread
+        def search_thread(query, emitter):
+            results = self.api.search_manga(query)
+            emitter.search_complete.emit(results)
+        
+        # Start the search thread
+        threading.Thread(target=search_thread, args=(query, signal_emitter), daemon=True).start()
+    
+    def display_search_results(self, results):
+        # Clear loading message
+        while self.results_layout.count():
+            item = self.results_layout.takeAt(0)
+            widget = item.widget()
+            if widget:
+                widget.deleteLater()
+        
         self.search_results = results.get("data", [])
         
         if not self.search_results:
@@ -470,6 +647,9 @@ class MangadexGUI(QWidget):
             
             # Add spacing between cards
             self.results_layout.addSpacing(10)
+            
+        # Add stretch at the end to push all results to the top
+        self.results_layout.addStretch(1)
     
     def select_directory(self):
         dir_path = QFileDialog.getExistingDirectory(self, "Select Download Directory", self.download_dir)
@@ -482,11 +662,24 @@ class MangadexGUI(QWidget):
     def show_chapter_selection(self, manga_data):
         self.current_manga = manga_data
         manga_id = manga_data.get("id")
+        manga_title = manga_data.get("attributes", {}).get("title", {}).get("en", "Unknown Manga")
         
         # Get preferred language from settings
         preferred_language = self.settings.get("preferred_language", "en")
         
-        dialog = ChapterSelectionDialog(self.api, manga_id, preferred_language, self)
+        try:
+            # Get already downloaded and incomplete chapters
+            downloaded_chapters, incomplete_chapters = self.api.get_downloaded_chapters(
+                manga_title, self.download_dir, manga_id
+            )
+        except Exception as e:
+            print(f"Error getting downloaded chapters: {e}")
+            downloaded_chapters, incomplete_chapters = [], []
+        
+        dialog = ChapterSelectionDialog(
+            self.api, manga_id, preferred_language, self, 
+            downloaded_chapters, incomplete_chapters
+        )
         if dialog.exec_():
             selected_chapters = dialog.get_selected_chapters()
             if selected_chapters:
@@ -509,13 +702,9 @@ class MangadexGUI(QWidget):
         # Setup progress bar
         self.chapter_progress_bar.setMaximum(len(chapter_data_list))
         self.chapter_progress_bar.setValue(0)
-        self.chapter_progress_label.setText(f"Downloading chapters: 0/{len(chapter_data_list)}")
-        self.chapter_progress_label.setVisible(True)
+        self.progress_label.setText(f"Chapter 0/{len(chapter_data_list)}             {manga_title}             Images 0/0")
+        self.progress_label.setVisible(True)
         self.chapter_progress_bar.setVisible(True)
-        
-        # Create progress dialog for individual chapter
-        self.progress_dialog = ImageDownloadDialog(self)
-        self.progress_dialog.show()
         
         # Create and start download thread
         self.download_thread = DownloadThread(
@@ -534,21 +723,20 @@ class MangadexGUI(QWidget):
         # Start download
         self.download_thread.start()
     
-    def update_download_progress(self, current, total):
-        if self.progress_dialog:
-            self.progress_dialog.update_progress(current, total)
+    def update_download_progress(self, current, total, manga_title, chapter_title):
+        # Get current chapter progress
+        chapter_current = self.chapter_progress_bar.value()
+        chapter_total = self.chapter_progress_bar.maximum()
+        
+        # Update the progress label with all information
+        self.progress_label.setText(f"Chapter {chapter_current}/{chapter_total}             {manga_title}             Images {current}/{total}")
     
-    def update_chapter_progress(self, current, total):
+    def update_chapter_progress(self, current, total, manga_title):
         self.chapter_progress_bar.setMaximum(total)
         self.chapter_progress_bar.setValue(current)
-        self.chapter_progress_label.setText(f"Downloading chapters: {current}/{total}")
+        self.progress_label.setText(f"Chapter {current}/{total}             {manga_title}             Images 0/0")
     
     def download_complete(self, downloaded_paths):
-        # Close progress dialog
-        if self.progress_dialog:
-            self.progress_dialog.close()
-            self.progress_dialog = None
-        
         # Show completion message
         manga_dir = os.path.join(self.download_dir, self.api._sanitize_filename(
             self.current_manga.get("attributes", {}).get("title", {}).get("en", "Unknown Manga")
@@ -557,4 +745,4 @@ class MangadexGUI(QWidget):
                                f"All {len(downloaded_paths)} chapters downloaded to:\n{manga_dir}")
         
         # Update progress bar text
-        self.chapter_progress_label.setText("Download complete!")
+        self.progress_label.setText("Download complete!")
